@@ -3,9 +3,7 @@ import React, { useCallback, useState, useMemo, VideoHTMLAttributes } from 'reac
 
 type SelectedDevice = MediaDeviceInfo | "default"
 
-function listDevices() {
-  return window.navigator.mediaDevices.enumerateDevices()
-}
+const listDevices = window.navigator.mediaDevices.enumerateDevices();
 
 function getDefaultCamera() {
   return window.navigator.mediaDevices.getUserMedia({
@@ -20,50 +18,51 @@ function getCameraById(deviceId: string) {
     video: { deviceId: deviceId }
   })
 }
+const devicesAndCameraPromise = Promise.all([
+  listDevices,
+  getDefaultCamera()
+]);
 
 function App() {
-  const [selectedDevice, setSelectedDevice] = useState<SelectedDevice>("default");
   const [devices, setDevices] = useState<JSX.Element[]>();
   const [videoStream, setVideoStream] = useState<MediaStream>();
 
 
   function mediaDeviceButtons(mediaDevice: MediaDeviceInfo) {
-    const name = `${mediaDevice.deviceId} - ${mediaDevice.groupId} - ${mediaDevice.kind} - ${mediaDevice.label}` 
-    return (<button key={mediaDevice.deviceId} onClick={() => selectDevice(mediaDevice)}>{name}</button>)
+    const name = `${mediaDevice.deviceId} - ${mediaDevice.kind} - ${mediaDevice.label}` 
+    return (<><button key={mediaDevice.deviceId} onClick={() => selectDevice(mediaDevice)}>{name}</button><br /></>)
+  }
+
+  function generateCameraButtons(devicesList: MediaDeviceInfo[]) {
+    let buttons = devicesList.filter(device => device.kind == "videoinput").map(mediaDeviceButtons)
+    buttons.push(<button key="default-device" onClick={() => selectDevice("default")}>Default</button>)
+    return buttons
   }
 
   function selectDevice(device: SelectedDevice) {
+    alert("selecting new device:"+ JSON.stringify(device))
+    if(videoStream) {
+      videoStream.getTracks().forEach(track => track.stop())
+      setVideoStream(undefined);
+    }
     if(device == "default") {
-      getDefaultCamera().then(setVideoStream)  
+      getDefaultCamera().then(stream => {alert("default camera acquired"); setVideoStream(stream); })
     } else {
-      getCameraById(device.deviceId).then(setVideoStream)
+      getCameraById(device.deviceId).then(stream => { alert(`device ${device.deviceId} acquired`); setVideoStream(stream); })
     }
   }
 
-  Promise.all([
-    listDevices(),
-    getDefaultCamera()
-  ]).then(([devicesList, media]) => {
-    if (!devices) setDevices(devicesList.filter(device => device.kind == "videoinput").map(mediaDeviceButtons))
+  devicesAndCameraPromise.then(([devicesList, media]) => {
+    if (!devices) setDevices(generateCameraButtons(devicesList))
     if (!videoStream) setVideoStream(media)
   })
-
-  const cameraDevices = useMemo(() =>
-    <>{devices}</>,
-    [devices]
-  )
-
-  const videoPlayback = useMemo(() =>
-    <Video autoPlay srcObject={videoStream}></Video>,
-    [videoStream]
-  )
   
   return (
     <div className="App">
-      Available media devices:
-      {cameraDevices}
-      Preview:
-      {videoPlayback}
+      Available media devices:<br/>
+      {devices}
+      <hr/>
+      <Video autoPlay srcObject={videoStream}></Video>
     </div>
   );
 }
